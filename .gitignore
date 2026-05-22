@@ -216,3 +216,44 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# === Photonics / EDA ===
+# Lumerical simulation files
+*.fsp
+*.lms
+*.ldf
+*.icp
+
+# Lumerical log and temp files
+*.fsp.log
+*.lms.log
+*_p0/
+*.lumerical_log
+
+# GDS files in build/output directories (keep examples in examples/)
+build/*.gds
+output/*.gds
+**/gds_output/
+
+# Large simulation results
+*.h5
+*.hdf5
+results/raw/
+sweeps/raw/
+
+# gdsfactory cache
+.gdsfactory/
+gdsfactory_cache/
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+
+# === OS ===
+.DS_Store
+Thumbs.db
+
+# === Project specific ===
+notebooks/scratch/
+notebooks/.ipynb_checkpoints/
