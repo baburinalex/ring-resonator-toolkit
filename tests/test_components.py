@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gdsfactory as gf
-import numpy as np
 import pytest
 from pydantic import ValidationError
 
