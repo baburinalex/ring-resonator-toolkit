@@ -97,5 +97,3 @@ The toolkit is designed around the sweep-and-analyze workflow. Below is an illus
 </p>
 
 The accompanying notebooks (`notebooks/`) demonstrate the full pipeline: parametric layout → batched FDTD simulation → spectrum extraction → Q/FSR analysis.
-
-## Project structure
