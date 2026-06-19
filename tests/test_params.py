@@ -3,8 +3,8 @@
 import pytest
 from pydantic import ValidationError
 
-from lumfdtd.geometry import draw_mmi_geometry, draw_ring_geometry
-from lumfdtd.params import MMIParams, Platform, RingParams, SimParams
+from ring_toolkit.geometry import draw_ring_geometry
+from ring_toolkit.params import Platform, RingParams, SimParams
 
 
 def test_ring_params_defaults_and_doubles():
@@ -45,10 +45,9 @@ def test_default_platform_is_soi():
     assert p.wg_width == 0.5  # одномодовый strip SOI
 
 
-def test_platform_presets():
+def test_platform_preset_soi():
     assert Platform.soi().material_core.startswith("Si (Silicon)")
-    assert Platform.sin().material_core.startswith("Si3N4")
-    assert Platform.soi().material_clad == Platform.sin().material_clad
+    assert Platform.soi().material_clad.startswith("SiO2")
 
 
 def test_ring_geometry_contains_expected_commands():
@@ -59,14 +58,4 @@ def test_ring_geometry_contains_expected_commands():
     assert "add_drop == 1" in lsf  # ветка add-drop присутствует
 
 
-def test_mmi_geometry_contains_expected_commands():
-    lsf = draw_mmi_geometry()
-    assert "MMI coupler" in lsf
-    assert "addpoly" in lsf
-    assert "vtx_out_up" in lsf
 
-
-def test_mmi_params_doubles():
-    d = MMIParams().doubles()
-    assert d["W_mmi"] == 3.0          # SOI стартовая оценка
-    assert d["input_width"] == 0.5    # одномодовый вход SOI
