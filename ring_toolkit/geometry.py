@@ -4,8 +4,7 @@
 Скрипты обращаются к переменным рабочего поля Lumerical
 (``wg_width``, ``ring_radius`` и т.д. в мкм; ``material_core`` — строка),
 которые слой ``sim`` заранее кладёт через ``putDouble`` / ``putString``.
-Такой паттерн сохранён из исходного MMI-проекта: геометрия отделена от
-числовых значений, что позволяет удобно перерисовывать её в свипах
+Геометрия намеренно отделена от числовых значений, что позволяет удобно перерисовывать её в свипах
 (switchtolayout -> delete -> redraw).
 """
 
@@ -78,88 +77,8 @@ set("script", ring_script);
 '''
 
 
-_MMI_GEOMETRY_LSF = '''
-
-addstructuregroup;
-set("name","MMI coupler");
-set("x", 0);
-set("y", 0);
-set("z", 0);
-
-adduserprop("wg_height", 2, wg_height * 1e-6);
-adduserprop("input_width", 2, input_width * 1e-6);
-adduserprop("taper_width", 2, taper_width * 1e-6);
-adduserprop("dist_btw_out_tapers", 2, dist_btw_out_tapers * 1e-6);
-adduserprop("L_input", 2, L_input * 1e-6);
-adduserprop("W_mmi", 2, W_mmi * 1e-6);
-adduserprop("L_mmi", 2, L_mmi * 1e-6);
-adduserprop("material_core", 1, material_core);
-
-mmi_script = "
-
-    vtx = [
-    0,-input_width/2;
-    0, input_width/2;
-    L_input, taper_width / 2;
-    L_input, -taper_width / 2];
-
-    addpoly;
-    set('name','taper');
-    set('vertices', vtx);
-    set('z span', wg_height);
-    set('material', material_core);
-
-    addrect;
-    set('name','mmi');
-    set('x span', L_mmi);
-    set('y span', W_mmi);
-    set('z span', wg_height);
-    set('x', L_input + L_mmi / 2);
-    set('y', 0);
-    set('z', 0);
-    set('material', material_core);
-
-    vtx_out_up = [
-    L_input + L_mmi, -taper_width/2 + dist_btw_out_tapers / 2;
-    L_input + L_mmi, taper_width/2 + dist_btw_out_tapers / 2;
-    2*L_input + L_mmi, input_width/2 + dist_btw_out_tapers / 2;
-    2*L_input + L_mmi, -input_width/2 + dist_btw_out_tapers / 2];
-
-    addpoly;
-    set('name','taper');
-    set('vertices', vtx_out_up);
-    set('z span', wg_height);
-    set('material', material_core);
-
-    vtx_out_down = [
-    L_input + L_mmi, -taper_width/2 - dist_btw_out_tapers / 2;
-    L_input + L_mmi, taper_width/2 - dist_btw_out_tapers / 2;
-    2*L_input + L_mmi, input_width/2 - dist_btw_out_tapers / 2;
-    2*L_input + L_mmi, -input_width/2 - dist_btw_out_tapers / 2];
-
-    addpoly;
-    set('name', 'taper');
-    set('vertices', vtx_out_down);
-    set('z span', wg_height);
-    set('material', material_core);
-
-";
-
-set("script", mmi_script);
-
-'''
-
 
 def draw_ring_geometry() -> str:
     """lsf-скрипт структурной группы 'ring coupler'."""
     return _RING_GEOMETRY_LSF
 
-
-def draw_mmi_geometry() -> str:
-    """lsf-скрипт структурной группы 'MMI coupler' (1x2 делитель).
-
-    Примечание: исходный проект использовал ``addcustom`` с уравнением;
-    здесь область MMI заменена на эквивалентный ``addrect`` — проще и
-    надёжнее воспроизводится. При необходимости верни addcustom.
-    """
-    return _MMI_GEOMETRY_LSF

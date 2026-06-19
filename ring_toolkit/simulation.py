@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .geometry import draw_mmi_geometry, draw_ring_geometry
-from .params import MMIParams, RingParams
+from .geometry import draw_ring_geometry
+from .params import RingParams
 
 DEFAULT_LUMAPI_PATH = r"C:\Program Files\Lumerical\v241\api\python"
 
@@ -167,59 +167,3 @@ def run_ring(
     t_in = np.asarray(lumapi.getVar(h, "T_in")).ravel()
     return RingSpectrum(lam_nm=lam_nm, t_through=t_through, t_in=t_in)
 
-
-# ---------------------------------------------------------------------
-# MMI: свип по длине/ширине (как в исходном проекте), загружает базовый .fsp
-# с мониторами in / out_2 / out_3
-# ---------------------------------------------------------------------
-
-_MMI_MOVE_AND_RUN_LSF = '''
-switchtolayout;
-select("MMI coupler");
-if (getnamednumber("MMI coupler") > 0) { delete; }
-select("out_2"); set("x", (L_mmi + 2*L_input)*1e-6);
-select("out_3"); set("x", (L_mmi + 2*L_input)*1e-6);
-'''
-
-_MMI_LOSSES_LSF = '''
-run;
-power_in    = transmission("in");    power_in    = power_in(2);
-power_out_2 = transmission("out_2"); power_out_2 = power_out_2(2);
-power_out_3 = transmission("out_3"); power_out_3 = power_out_3(2);
-losses = 10 * log10((power_out_2 + power_out_3) / power_in);
-'''
-
-
-def run_mmi_sweep(
-    base_fsp: str,
-    l_mmi_values,
-    w_mmi_values,
-    params: MMIParams | None = None,
-    lumapi_path: str = DEFAULT_LUMAPI_PATH,
-    hide: bool = False,
-) -> np.ndarray:
-    """Свип потерь 1x2 MMI по (W_mmi, L_mmi). Возвращает матрицу потерь, дБ.
-
-    base_fsp — путь к .fsp с уже настроенными FDTD/источником/мониторами
-    in/out_2/out_3 (как в исходном workflow).
-    """
-    params = params or MMIParams()
-    lumapi = _import_lumapi(lumapi_path)
-    h = lumapi.open("fdtd", hide=hide)
-
-    _put_params(lumapi, h, params)
-    lumapi.evalScript(h, draw_mmi_geometry())
-    lumapi.evalScript(h, f'load("{base_fsp}");')
-
-    total = []
-    for width in w_mmi_values:
-        row = []
-        for length in l_mmi_values:
-            lumapi.putDouble(h, "L_mmi", float(length))
-            lumapi.putDouble(h, "W_mmi", float(width))
-            lumapi.evalScript(h, _MMI_MOVE_AND_RUN_LSF)
-            lumapi.evalScript(h, draw_mmi_geometry())
-            lumapi.evalScript(h, _MMI_LOSSES_LSF)
-            row.append(round(lumapi.getVar(h, "losses"), 4))
-        total.append(row)
-    return np.array(total)

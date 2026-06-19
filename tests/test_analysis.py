@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from lumfdtd.analysis import analyze_spectrum, estimate_q, find_resonances
+from ring_toolkit.analysis import analyze_spectrum, estimate_q, find_resonances
 
 
 def lorentzian_dip(lam_nm, lam0, fwhm, depth=0.9):

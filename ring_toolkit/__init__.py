@@ -1,14 +1,22 @@
 """
-lumfdtd — моделирование фотонных компонентов на SOI (кремний-на-изоляторе)
-в Ansys Lumerical FDTD (1x2 MMI-делитель и кольцевой резонатор) через lumapi.
-Платформа настраивается: Platform.soi() / Platform.sin().
+ring_toolkit — проектирование, моделирование и анализ фотонных кольцевых
+резонаторов на платформе SOI (кремний-на-изоляторе, 220 нм).
 
-Публичный API:
-    params:   RingParams, MMIParams, Platform, SimParams
-    geometry: draw_ring_geometry, draw_mmi_geometry
-    sim:      run_ring, run_mmi_sweep, RingSpectrum
+Два слоя:
+    layout (GDS): параметрическая раскладка на gdsfactory —
+        ring_toolkit.components (RingResonatorParams, ring_resonator_all_pass).
+    моделирование: FDTD-цепочка через Ansys Lumerical (lumapi) и анализ
+        спектра. Платформа задаётся через Platform.soi().
+
+Публичный API верхнего уровня (лёгкий импорт, без gdsfactory):
+    params:   RingParams, Platform, SimParams
+    geometry: draw_ring_geometry
     analysis: analyze_spectrum, find_resonances, estimate_q,
               Resonance, SpectrumAnalysis
+
+Запуск FDTD — из ring_toolkit.simulation (run_ring, RingSpectrum):
+вынесен из пакетного __init__, чтобы импорт не тянул lumapi.
+Раскладка слоёв — из ring_toolkit.components (требует gdsfactory).
 """
 
 from __future__ import annotations
@@ -20,31 +28,19 @@ from .analysis import (
     estimate_q,
     find_resonances,
 )
-from .design import (
-    MMIDesignEstimate,
-    beat_length_um,
-    mmi_1x2_symmetric,
-    suggest_length_sweep_um,
-)
-from .geometry import draw_mmi_geometry, draw_ring_geometry
-from .params import MMIParams, Platform, RingParams, SimParams
+from .geometry import draw_ring_geometry
+from .params import Platform, RingParams, SimParams
 
 __version__ = "0.1.0"
 
 __all__ = [
-    "MMIDesignEstimate",
-    "MMIParams",
     "Platform",
     "RingParams",
     "Resonance",
     "SimParams",
     "SpectrumAnalysis",
     "analyze_spectrum",
-    "beat_length_um",
-    "draw_mmi_geometry",
     "draw_ring_geometry",
     "estimate_q",
     "find_resonances",
-    "mmi_1x2_symmetric",
-    "suggest_length_sweep_um",
 ]
