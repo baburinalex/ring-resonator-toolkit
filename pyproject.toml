@@ -7,7 +7,7 @@ name = "ring-resonator-toolkit"
 version = "0.1.0"
 description = "Parametric ring resonator design toolkit with gdsfactory layout generation and Lumerical FDTD automation"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 license = { text = "MIT" }
 authors = [
     { name = "Alex Baburin", email = "baburinalex@gmail.com" }
@@ -18,8 +18,8 @@ classifiers = [
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
     "Topic :: Scientific/Engineering :: Physics",
 ]
 
@@ -27,7 +27,7 @@ dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
     "matplotlib>=3.7",
-    "gdsfactory>=7.0",
+    "gdsfactory>=9.0",
     "pydantic>=2.0",
 ]
 
@@ -54,7 +54,7 @@ python_files = "test_*.py"
 
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B"]
