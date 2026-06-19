@@ -16,18 +16,18 @@
 Ring resonators are workhorses of silicon photonics — used in modulators, filters, sensors, and frequency combs. Designing them well requires iterating across a multidimensional parameter space (radius, coupling gap, waveguide width, coupling length) under fabrication and target-spectrum constraints. This toolkit makes that iteration cheap and reproducible:
 
 - **Programmatic layout** — generate any ring geometry from a single Python call, with parameter validation enforcing fabrication and physical bounds.
-- **Reproducible simulation** — wrap Lumerical FDTD runs as parameter sweeps that can be re-executed and version-controlled.
-- **Analysis pipeline** — extract Q-factor, FSR, extinction ratio, and group index directly from simulation outputs.
+- **FDTD automation** — drive Lumerical FDTD from Python: build the geometry, run the simulation, and pull the transmission spectrum back, all from a single validated parameter object.
+- **Spectrum analysis** — find resonances and extract loaded Q (from FWHM) and free spectral range (FSR) from a transmission spectrum, with no Lumerical dependency.
 - **Test-driven** — every component has unit tests covering geometry, port topology, and parameter validation.
 
 ## Features
 
 - 🔧 **Parametric components**: all-pass rings, racetracks, and (planned) add-drop topologies
 - ✅ **Pydantic validation**: physical bounds enforced at construction (e.g., gap ≥ 50 nm SOI fab limit)
-- 🧪 **23+ unit tests** with `pytest`, including parametrized sweeps
+- 🧪 **35 unit tests** with `pytest`, including parametrized sweeps
 - 🤖 **CI/CD** via GitHub Actions: pytest + ruff on every push, across Python 3.11 and 3.12
 - 📦 **Modern Python packaging** with `pyproject.toml` (editable install, optional dev deps)
-- 📊 **Analysis utilities** (planned): Q-factor extraction via Lorentzian fit, FSR detection, peak finding
+- 📊 **Spectrum analysis**: resonance finding, loaded Q from FWHM, and FSR — pure numpy, runs without Lumerical
 
 ## Component gallery
 
@@ -37,7 +37,7 @@ Ring resonators are workhorses of silicon photonics — used in modulators, filt
 
 ## Installation
 
-Requires Python ≥ 3.10.
+Requires Python ≥ 3.11.
 
 ```bash
 git clone https://github.com/baburinalex/ring-resonator-toolkit.git
@@ -88,11 +88,50 @@ pydantic_core.ValidationError: gap 0.01 um is below typical fabrication limit (~
 pydantic_core.ValidationError: Input should be greater than 0
 ```
 
+## FDTD simulation and analysis
+
+The Lumerical layer builds and runs a ring from a validated parameter object, then hands the
+transmission spectrum to the analysis layer (which is pure numpy and needs no Lumerical):
+
+```python
+from ring_toolkit.params import RingParams, Platform, SimParams
+from ring_toolkit.simulation import run_ring
+from ring_toolkit.analysis import analyze_spectrum
+
+params = RingParams(
+    ring_radius=5.0, gap=0.2, wg_width=0.5,
+    platform=Platform.soi(),                       # SOI, 220 nm
+    sim=SimParams(lam_start=1500.0, lam_stop=1600.0),
+)
+
+spec = run_ring(params)                            # needs lumapi; build_only=True skips the solve
+result = analyze_spectrum(spec.lam_nm, spec.t_norm)
+print(result.report())                             # resonances, loaded Q, FSR
+```
+
 ## Parameter sweeps
 
-The toolkit is designed around the sweep-and-analyze workflow. Below is an illustrative Q-factor heatmap over the (radius, gap) plane — in practice, populated from `lumapi` FDTD runs:
+The toolkit supports a sweep-and-analyze workflow: loop `run_ring` over a grid of `RingParams`
+and feed each transmission spectrum to `analyze_spectrum`. Below is an illustrative Q-factor
+heatmap over the (radius, gap) plane — in practice, populated from `lumapi` FDTD runs:
 
 <p align="center">
   <img src="examples/results/parameter_sweep_preview.png" alt="Parameter sweep heatmap" width="600"/>
 </p>
 
+## Project structure
+
+```text
+ring_toolkit/
+├── components.py    # gdsfactory parametric layout (GDS): RingResonatorParams, ring_resonator_all_pass
+├── params.py        # pydantic parameter models: Platform (SOI), SimParams, RingParams
+├── geometry.py      # Lumerical .lsf geometry generator: draw_ring_geometry
+├── simulation.py    # lumapi FDTD driver: run_ring, RingSpectrum
+└── analysis.py      # spectrum analysis: find_resonances, estimate_q, analyze_spectrum (loaded Q, FSR)
+tests/               # pytest suite (components, params, analysis)
+examples/            # run_ring.py + README image generation
+```
+
+The layout layer (`components.py`) depends on gdsfactory; the parameter, geometry, and analysis
+layers are pure numpy/pydantic. The FDTD driver (`simulation.py`) imports `lumapi` lazily, so the
+package imports — and the full test suite runs — without a Lumerical license.
