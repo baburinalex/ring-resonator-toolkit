@@ -12,9 +12,8 @@ import sys
 from dataclasses import dataclass
 
 import numpy as np
-
 from geometry import draw_ring_geometry
-from params import RingParams, SimParams 
+from params import RingParams, SimParams
 
 DEFAULT_LUMAPI_PATH = r"C:\Program Files\Lumerical\v241\api\python"
 
@@ -153,7 +152,7 @@ def run_ring(params=None, lumapi_path=DEFAULT_LUMAPI_PATH, build_only=False, hid
         _put_params(lumapi, h, params)
         lumapi.evalScript(h, draw_ring_geometry())
         lumapi.evalScript(h, _BUILD_RING_SIM_LSF)
-        lumapi.evalScript(h, 'save("check.fsp");');          # чтобы успеть глянуть модель в GUI
+        lumapi.evalScript(h, 'save("check.fsp");')          # чтобы успеть глянуть модель в GUI
         if build_only:
             return None
         lumapi.evalScript(h, _RUN_RING_LSF)
@@ -175,11 +174,11 @@ def run_ring(params=None, lumapi_path=DEFAULT_LUMAPI_PATH, build_only=False, hid
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
- 
+
     params = RingParams(sim=SimParams(mesh_override=40.0, freq_points=1000, sim_time=20000.0))                      # параметры по умолчанию
     print("Запуск FDTD... откроется окно Lumerical")
     spec = run_ring(params, hide=False)        # hide=False -> окно видно
- 
+
     print(f"Точек спектра: {len(spec.lam_nm)}")
     plt.plot(spec.lam_nm, spec.t_norm)
     plt.xlabel("Длина волны, нм")
@@ -189,9 +188,8 @@ if __name__ == "__main__":
     plt.savefig("ring_spectrum_fdtd.png", dpi=130)
     plt.show()
     print("Готово: ring_spectrum_fdtd.png")
-    plt.show() 
+    plt.show()
 
 np.savetxt("ring_spectrum.txt",
                np.column_stack([spec.lam_nm, spec.t_norm]),
                header="lambda_nm  T_norm", comments="")
-    
