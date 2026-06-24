@@ -175,7 +175,9 @@ def run_ring(params=None, lumapi_path=DEFAULT_LUMAPI_PATH, build_only=False, hid
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
-    params = RingParams(sim=SimParams(mesh_override=40.0, freq_points=1000, sim_time=20000.0))                      # параметры по умолчанию
+    params = RingParams(
+        sim=SimParams(mesh_override=40.0, freq_points=1000, sim_time=20000.0)
+        )                      # параметры по умолчанию
     print("Запуск FDTD... откроется окно Lumerical")
     spec = run_ring(params, hide=False)        # hide=False -> окно видно
 
