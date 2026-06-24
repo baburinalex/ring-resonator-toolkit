@@ -55,7 +55,7 @@ class RingParams(BaseModel):
     wg_width: float = Field(0.5, gt=0, description="ширина strip-волновода (SOI ~0.5), мкм")
     ring_radius: float = Field(5.0, gt=0, description="радиус по средней линии, мкм")
     gap: float = Field(0.2, gt=0, description="зазор край-в-край шина/кольцо, мкм")
-    L_bus: float = Field(16.0, gt=0, description="длина шины вдоль x, мкм")
+    L_bus: float = Field(22.0, gt=0, description="длина шины вдоль x, мкм (длиннее кольца -> в PML)")
     add_drop: int = Field(0, ge=0, le=1, description="0=all-pass, 1=add-drop")
 
     platform: Platform = Field(default_factory=Platform)
