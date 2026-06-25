@@ -11,9 +11,9 @@
 
 import os
 
-from lumfdtd.analysis import analyze_spectrum
-from lumfdtd.params import Platform, RingParams, SimParams
-from lumfdtd.sim import run_ring
+from ring_toolkit.analysis import analyze_spectrum
+from ring_toolkit.params import Platform, RingParams, SimParams
+from ring_toolkit.simulation import run_ring
 
 BUILD_ONLY = False
 LUMAPI_PATH = r"C:\Program Files\Lumerical\v241\api\python"
