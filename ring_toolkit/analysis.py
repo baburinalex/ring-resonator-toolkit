@@ -1,12 +1,16 @@
 """
 Анализ спектра пропускания кольцевого резонатора (только numpy).
 
-Резонансы all-pass кольца — это провалы (dips) в T(lambda).
-Модуль ищет провалы, оценивает нагруженную добротность Q по ширине
-на полувысоте (FWHM) и считает свободный спектральный диапазон (FSR).
+Резонансы all-pass кольца — провалы (dips) в T(lambda). Модуль ищет провалы
+ПО СЫРЫМ данным (без сглаживания, которое размывает узкие резонансы),
+отсекает мелкую рябь порогом по глубине, оценивает нагруженную Q по ширине
+на полувысоте (FWHM) и считает FSR и групповой индекс n_g.
 
-Важно: модуль не зависит от lumapi/Lumerical — поэтому он полностью
-покрывается юнит-тестами и работает в CI без лицензии.
+Окна анализа задаются в НАНОМЕТРАХ (а не в точках), поэтому модуль одинаково
+корректен и на мелкой сетке по длине волны, и на крупной.
+
+Не зависит от lumapi/Lumerical -> полностью покрывается юнит-тестами и работает
+в CI без лицензии.
 """
 
 from __future__ import annotations
@@ -27,10 +31,16 @@ class Resonance:
 class SpectrumAnalysis:
     resonances: list[Resonance] = field(default_factory=list)
     fsr_nm: list[float] = field(default_factory=list)
+    n_g: float = float("nan")
 
     @property
     def mean_fsr_nm(self) -> float:
         return float(np.mean(self.fsr_nm)) if self.fsr_nm else float("nan")
+
+    @property
+    def mean_q(self) -> float:
+        qs = [r.q for r in self.resonances if np.isfinite(r.q)]
+        return float(np.mean(qs)) if qs else float("nan")
 
     def report(self) -> str:
         lines = ["--- Анализ спектра through-порта ---"]
@@ -45,45 +55,74 @@ class SpectrumAnalysis:
         if self.fsr_nm:
             fsr = ", ".join(f"{v:.2f}" for v in self.fsr_nm)
             lines.append(f"  FSR, нм: {fsr}  (средний {self.mean_fsr_nm:.2f})")
+        if np.isfinite(self.mean_q):
+            lines.append(f"  средняя нагруженная Q = {self.mean_q:.0f}")
+        if np.isfinite(self.n_g):
+            lines.append(f"  групповой индекс n_g = {self.n_g:.2f}")
         return "\n".join(lines)
 
 
-def smooth(y: np.ndarray, k: int = 5) -> np.ndarray:
-    """Простое скользящее среднее (для устойчивого поиска экстремумов)."""
-    y = np.asarray(y, dtype=float)
-    if k < 2 or len(y) < k:
-        return y
-    kernel = np.ones(k) / k
-    return np.convolve(y, kernel, mode="same")
+def _win_points(lam_nm: np.ndarray, win_nm: float) -> int:
+    """Перевод окна из нанометров в число точек по фактическому шагу сетки."""
+    n = len(lam_nm)
+    if n < 2:
+        return 1
+    step = abs(lam_nm[-1] - lam_nm[0]) / (n - 1)
+    return max(1, int(round(win_nm / step)))
 
 
 def find_resonances(
-    lam_nm: np.ndarray, t: np.ndarray, min_prominence_frac: float = 0.03
+    lam_nm: np.ndarray,
+    t: np.ndarray,
+    min_depth: float = 0.15,
+    baseline_win_nm: float = 6.0,
+    min_sep_nm: float = 1.0,
 ) -> list[int]:
-    """Индексы провалов (локальных минимумов) с минимальной заметностью."""
-    lam_nm = np.asarray(lam_nm, dtype=float)
-    ts = smooth(np.asarray(t, dtype=float), 5)
-    tmax = float(np.max(ts))
-    dips: list[int] = []
-    for i in range(1, len(ts) - 1):
-        if ts[i] <= ts[i - 1] and ts[i] < ts[i + 1]:
-            if (tmax - ts[i]) > min_prominence_frac * tmax:
-                dips.append(i)
-    return dips
-
-
-def estimate_q(
-    lam_nm: np.ndarray, t: np.ndarray, idx: int, win: int = 200
-) -> tuple[float, float, float]:
     """
-    Нагруженная Q из ширины провала на полувысоте (линейная интерполяция
-    пересечений уровня полу-глубины). Возвращает (lambda0, Q, depth).
+    Индексы провалов по СЫРЫМ данным.
+
+    Провал = локальный минимум, глубина которого (локальная база минус значение)
+    >= min_depth. Локальная база — максимум T в окне +-baseline_win_nm, что
+    отсекает мелкую рябь (её глубина мала). Близкие минимумы (< min_sep_nm)
+    схлопываются в самый глубокий, чтобы рябь на дне не дробила провал.
     """
     lam_nm = np.asarray(lam_nm, dtype=float)
     t = np.asarray(t, dtype=float)
     n = len(t)
-    lo = max(0, idx - win)
-    hi = min(n, idx + win + 1)
+    w = _win_points(lam_nm, baseline_win_nm)
+    cand = []
+    for i in range(1, n - 1):
+        if t[i] <= t[i - 1] and t[i] < t[i + 1]:
+            lo = max(0, i - w)
+            hi = min(n, i + w + 1)
+            baseline = float(np.max(t[lo:hi]))
+            if (baseline - t[i]) >= min_depth:
+                cand.append(i)
+    if not cand:
+        return []
+    groups: list[list[int]] = [[cand[0]]]
+    for i in cand[1:]:
+        if abs(lam_nm[i] - lam_nm[groups[-1][-1]]) <= min_sep_nm:
+            groups[-1].append(i)
+        else:
+            groups.append([i])
+    return [int(g[int(np.argmin(t[g]))]) for g in groups]
+
+
+def estimate_q(
+    lam_nm: np.ndarray, t: np.ndarray, idx: int, win_nm: float = 5.0
+) -> tuple[float, float, float]:
+    """
+    Нагруженная Q из ширины провала на полувысоте (FWHM) по сырым данным.
+    Окно win_nm в нанометрах (должно быть меньше FSR, но шире провала).
+    Возвращает (lambda0, Q, depth).
+    """
+    lam_nm = np.asarray(lam_nm, dtype=float)
+    t = np.asarray(t, dtype=float)
+    n = len(t)
+    w = _win_points(lam_nm, win_nm)
+    lo = max(0, idx - w)
+    hi = min(n, idx + w + 1)
     baseline = float(np.max(t[lo:hi]))
     tmin = float(t[idx])
     depth = baseline - tmin
@@ -103,7 +142,6 @@ def estimate_q(
 
     left = _cross(range(idx, lo - 1, -1))
     right = _cross(range(idx, hi))
-
     if left is None or right is None:
         return lam0, float("nan"), depth
     fwhm = abs(right - left)
@@ -112,18 +150,45 @@ def estimate_q(
     return lam0, lam0 / fwhm, depth
 
 
+def group_index_from_fsr(
+    fsr_nm: float, lambda0_nm: float, radius_um: float, coupling_length_um: float = 0.0
+) -> float:
+    """
+    Групповой индекс из FSR кольца:  FSR = lambda^2 / (n_g * L),  L = 2*pi*R + 2*Lc.
+    Длины волн в нм, радиус/длина связи в мкм. Возвращает n_g.
+    """
+    if fsr_nm <= 0 or radius_um <= 0:
+        return float("nan")
+    lam_m = lambda0_nm * 1e-9
+    fsr_m = fsr_nm * 1e-9
+    length_m = (2.0 * np.pi * radius_um + 2.0 * coupling_length_um) * 1e-6
+    return float(lam_m**2 / (fsr_m * length_m))
+
+
 def analyze_spectrum(
-    lam_nm: np.ndarray, t: np.ndarray, min_prominence_frac: float = 0.03
+    lam_nm: np.ndarray,
+    t: np.ndarray,
+    min_depth: float = 0.15,
+    radius_um: float | None = None,
+    coupling_length_um: float = 0.0,
 ) -> SpectrumAnalysis:
-    """Полный разбор: резонансы + Q + FSR."""
+    """
+    Полный разбор: резонансы (по сырым данным, порог глубины) + Q + FSR.
+    Если задан radius_um — дополнительно считает n_g из среднего FSR.
+    """
     lam_nm = np.asarray(lam_nm, dtype=float)
     t = np.asarray(t, dtype=float)
     order = np.argsort(lam_nm)
     lam_nm, t = lam_nm[order], t[order]
 
-    dips = find_resonances(lam_nm, t, min_prominence_frac)
+    dips = find_resonances(lam_nm, t, min_depth=min_depth)
     res = [Resonance(*estimate_q(lam_nm, t, i)) for i in dips]
 
-    centers = np.array([r.lambda0_nm for r in res])
-    fsr = list(np.diff(np.sort(centers))) if len(centers) >= 2 else []
-    return SpectrumAnalysis(resonances=res, fsr_nm=[float(v) for v in fsr])
+    centers = np.array(sorted(r.lambda0_nm for r in res))
+    fsr = [float(v) for v in np.diff(centers)] if len(centers) >= 2 else []
+
+    out = SpectrumAnalysis(resonances=res, fsr_nm=fsr)
+    if radius_um is not None and fsr:
+        lam0 = float(np.mean(centers))
+        out.n_g = group_index_from_fsr(out.mean_fsr_nm, lam0, radius_um, coupling_length_um)
+    return out
