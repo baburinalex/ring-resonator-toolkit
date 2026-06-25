@@ -2,14 +2,14 @@
 
 import numpy as np
 import pytest
+
+from ring_toolkit.analysis import analyze_spectrum
 from ring_toolkit.analytical_model import (
     RingModelParams,
     add_drop_transmission,
     all_pass_transmission,
     figures_of_merit,
 )
-
-from ring_toolkit.analysis import analyze_spectrum
 
 
 def _soi_params(**kw) -> RingModelParams:
