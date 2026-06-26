@@ -257,3 +257,10 @@ Thumbs.db
 # === Project specific ===
 notebooks/scratch/
 notebooks/.ipynb_checkpoints/
+
+# === Personal / локальные данные и выхлоп ===
+# Спектры из FDTD (локальные данные, не для репо)
+ring_spectrum*.txt
+
+# Сгенерированные картинки-результаты примеров
+examples/results/

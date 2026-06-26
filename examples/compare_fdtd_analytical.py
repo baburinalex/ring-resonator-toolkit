@@ -33,27 +33,38 @@ from ring_toolkit.analytical_model import (
 #    t1 — self-coupling (подгоняется под глубину/Q твоего FDTD-резонанса).
 # ---------------------------------------------------------------------------
 MODEL = RingModelParams(
-    ring_radius=5.0,      # мкм
+    ring_radius=5.0,      # мкм (как в твоём FDTD)
     coupling_length=0.0,  # мкм (racetrack -> > 0)
-    n_eff0=2.40,
-    n_g0=4.15,
+    n_eff0=2.40,          # из мод-солвера на 1550 нм (уточни своим значением)
+    n_g0=4.15,            # из FSR ~18.4 нм твоего FDTD
     lam0_nm=1550.0,
-    loss_db_cm=3.0,
-    t1=0.97,
+    loss_db_cm=19.0,      # подгонка под глубину/Q резонанса
+    t1=0.96,              # подгонка под глубину/Q резонанса
 )
 
 
 def load_fdtd_spectrum(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    """Загрузка FDTD-спектра. .npz с ключами lam_nm + (t|t_norm) или .csv с двумя столбцами."""
+    """Загрузка FDTD-спектра.
+
+    Поддерживается .npz (ключи lam_nm + t|t_norm) и текстовые .csv/.txt/.dat с двумя
+    столбцами (lambda_nm, T). Необязательная строка-заголовок пропускается, длины волн
+    сортируются по возрастанию.
+    """
     if path.suffix == ".npz":
         d = np.load(path)
         lam = np.asarray(d["lam_nm"], dtype=float)
         t = np.asarray(d["t_norm"] if "t_norm" in d else d["t"], dtype=float)
-        return lam, t
-    if path.suffix in (".csv", ".txt"):
-        arr = np.loadtxt(path, delimiter="," if path.suffix == ".csv" else None)
-        return arr[:, 0].astype(float), arr[:, 1].astype(float)
-    raise ValueError(f"неизвестный формат: {path.suffix} (ожидается .npz/.csv/.txt)")
+    elif path.suffix in (".csv", ".txt", ".dat"):
+        delim = "," if path.suffix == ".csv" else None
+        try:
+            arr = np.loadtxt(path, delimiter=delim)
+        except ValueError:
+            arr = np.loadtxt(path, delimiter=delim, skiprows=1)  # пропустить заголовок
+        lam, t = arr[:, 0].astype(float), arr[:, 1].astype(float)
+    else:
+        raise ValueError(f"неизвестный формат: {path.suffix} (ожидается .npz/.csv/.txt/.dat)")
+    order = np.argsort(lam)  # по возрастанию длины волны
+    return lam[order], t[order]
 
 
 def _synthetic_fdtd(lam_nm: np.ndarray) -> np.ndarray:
