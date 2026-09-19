@@ -256,4 +256,5 @@ Thumbs.db
 
 # === Project specific ===
 notebooks/scratch/
-notebooks/.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/sweeps/
+sweeps/

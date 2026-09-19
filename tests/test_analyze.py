@@ -1,4 +1,5 @@
 import json
+import math
 
 import numpy as np
 
@@ -21,9 +22,26 @@ def test_clean_case_has_no_anomalies():
                     Resonance(lambda0_nm=1554.0, q=1e4, depth=0.8)],
         fsr_nm=[8.0],
     )
-    result = check_analysis(analysis, LAM, win_nm=5.0, min_sep_nm=1.0)
+    # R = 20 мкм: по геометрии в 20 нм ожидается >= ~1.6 резонанса, найдено 2 — норма
+    result = check_analysis(
+        analysis, LAM, win_nm=5.0, min_sep_nm=1.0, round_trip_um=2 * math.pi * 20.0
+    )
     assert result["anomalies"] == []
     assert all(r["q_reliable"] for r in result["resonances"])
+
+
+def test_single_resonance_flags_fsr_undetermined():
+    analysis = SpectrumAnalysis(resonances=[Resonance(lambda0_nm=1550.0, q=1e4, depth=0.8)])
+    assert "FSR_UNDETERMINED" in _codes(check_analysis(analysis, LAM, win_nm=5.0, min_sep_nm=1.0))
+
+
+def test_too_few_resonances_for_geometry_is_flagged():
+    # R = 200 мкм: в 20 нм ожидается >= ~15 резонансов, найден один
+    analysis = SpectrumAnalysis(resonances=[Resonance(lambda0_nm=1550.0, q=1e4, depth=0.8)])
+    result = check_analysis(
+        analysis, LAM, win_nm=5.0, min_sep_nm=1.0, round_trip_um=2 * math.pi * 200.0
+    )
+    assert "RESONANCE_COUNT_LOW" in _codes(result)
 
 
 def test_undersampled_high_q_is_flagged_not_reported_as_reliable():

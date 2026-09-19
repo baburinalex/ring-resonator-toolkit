@@ -22,6 +22,7 @@ from .sweep_io import list_runs, load_run
 
 MIN_POINTS_PER_FWHM = 5.0  # меньше -> Q считается ненадёжной
 FSR_SPREAD_TOL = 0.05  # (max-min)/mean по FSR; больше -> вероятен пропуск резонанса
+N_G_MIN_PLAUSIBLE = 1.5  # нижняя граница n_g для оценки ожидаемого числа резонансов
 
 THROUGH_PORT_NOTE = (
     "Q — нагруженная. По одному through-порту режимы пере- и недосвязи "
@@ -52,7 +53,11 @@ def _find_key(obj, key: str):
 
 
 def check_analysis(
-    analysis: SpectrumAnalysis, lam_nm: np.ndarray, win_nm: float, min_sep_nm: float
+    analysis: SpectrumAnalysis,
+    lam_nm: np.ndarray,
+    win_nm: float,
+    min_sep_nm: float,
+    round_trip_um: float | None = None,
 ) -> dict:
     """Превращает SpectrumAnalysis в JSON-совместимый словарь с проверками."""
     step_nm = float(np.median(np.abs(np.diff(lam_nm))))
@@ -80,6 +85,31 @@ def check_analysis(
 
     if not rows:
         anomalies.append({"code": "NO_RESONANCES", "message": "Резонансы не найдены."})
+    if len(rows) == 1:
+        anomalies.append(
+            {
+                "code": "FSR_UNDETERMINED",
+                "message": (
+                    "Найден один резонанс: FSR не определён, "
+                    "проверки окна и min_sep_nm невозможны."
+                ),
+            }
+        )
+    if round_trip_um:
+        span_nm = float(np.max(lam_nm) - np.min(lam_nm))
+        lam_c = float(np.mean(lam_nm))
+        expected_min = span_nm * N_G_MIN_PLAUSIBLE * round_trip_um * 1e3 / lam_c**2
+        if len(rows) < 0.5 * expected_min:
+            anomalies.append(
+                {
+                    "code": "RESONANCE_COUNT_LOW",
+                    "message": (
+                        f"Найдено {len(rows)} резонансов, а по геометрии (обход "
+                        f"{round_trip_um:.4g} мкм, n_g >= {N_G_MIN_PLAUSIBLE}) в диапазоне "
+                        f"{span_nm:.3g} нм ожидается не меньше {expected_min:.1f}."
+                    ),
+                }
+            )
     if n_failed:
         anomalies.append(
             {
@@ -154,16 +184,19 @@ def analyze_sweep(sweep_dir: str | Path, min_depth: float = 0.15) -> dict:
     runs = []
     for run_dir in list_runs(sweep_dir):
         spectrum, params = load_run(run_dir)
-        radius = _find_key(params, "radius_um")
-        coupling = _find_key(params, "coupling_length_um")
+        radius = _find_key(params, "radius_um") or _find_key(params, "ring_radius")
+        coupling = _find_key(params, "coupling_length_um") or _find_key(params, "coupling_length")
+        radius = float(radius) if radius is not None else None
+        coupling = float(coupling) if coupling is not None else 0.0
+        round_trip = 2.0 * math.pi * radius + 2.0 * coupling if radius else None
         analysis = analyze_spectrum(
             spectrum.lam_nm,
             np.real(spectrum.t_norm),
             min_depth=min_depth,
-            radius_um=float(radius) if radius is not None else None,
-            coupling_length_um=float(coupling) if coupling is not None else 0.0,
+            radius_um=radius,
+            coupling_length_um=coupling,
         )
-        result = check_analysis(analysis, spectrum.lam_nm, win_nm, min_sep_nm)
+        result = check_analysis(analysis, spectrum.lam_nm, win_nm, min_sep_nm, round_trip)
         runs.append({"run": run_dir.name, "params": params, **result})
 
     return {
