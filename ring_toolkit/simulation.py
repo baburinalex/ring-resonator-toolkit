@@ -12,8 +12,9 @@ import sys
 from dataclasses import dataclass
 
 import numpy as np
-from geometry import draw_ring_geometry
-from params import RingParams, SimParams
+
+from .geometry import draw_ring_geometry
+from .params import RingParams, SimParams
 
 DEFAULT_LUMAPI_PATH = r"C:\Program Files\Lumerical\v241\api\python"
 
@@ -192,6 +193,6 @@ if __name__ == "__main__":
     print("Готово: ring_spectrum_fdtd.png")
     plt.show()
 
-np.savetxt("ring_spectrum.txt",
+    np.savetxt("ring_spectrum.txt",
                np.column_stack([spec.lam_nm, spec.t_norm]),
                header="lambda_nm  T_norm", comments="")

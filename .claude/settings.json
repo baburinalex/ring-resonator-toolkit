@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m ring_toolkit.analyze *)",
+      "Edit(/sweeps/**/report.md)"
+    ],
+    "deny": [
+      "Read(/sweeps/**/*.npz)"
+    ]
+  }
+}
