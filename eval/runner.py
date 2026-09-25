@@ -15,7 +15,7 @@ from pathlib import Path
 from .agent import run_agent
 from .client import ChatClient, OpenAICompatClient
 from .config import EvalConfig, ModelConfig
-from .scoring import ANSWER_KEYS, known_codes, parse_answer, score
+from .scoring import ANSWER_KEYS, expected_regime, known_codes, parse_answer, score
 from .tools import MODES, REGISTRY, TRUTH_NAME, ToolContext, ToolRegistry
 
 WORKDIR_NAME = "case"  # нейтральное имя: исходный case_id агенту не показываем
@@ -56,17 +56,21 @@ The working directory holds one measurement of an all-pass microring resonator
   run_000/spectrum.npz  arrays lam_nm (wavelength, nm), t_through, t_in;
                         normalised transmission is t_through / t_in
   run_000/params.json   what the experimenter knows: ring_radius (um),
-                        coupling_length (um), lam0_nm, port, and kappa2_design —
-                        the design estimate of the power coupling kappa^2 (+-25 %)
+                        coupling_length (um), lam0_nm, port and, if available,
+                        kappa2_design — the design estimate of the power
+                        coupling kappa^2 (+-25 %)
   sweep.json            sweep metadata
 
 Determine, at 1550 nm:
-  - the coupling regime: one of "overcoupled", "undercoupled", "critical";
+  - the coupling regime: one of "overcoupled", "undercoupled", "critical",
+    or "ambiguous" if the data do not determine it;
   - the intrinsic quality factor Q_i (a number);
   - which of these anomalies are present in the data (use the codes exactly):
 {codes}
 Note: |T| of an all-pass ring is symmetric in the self-coupling t and the
-round-trip amplitude a; use kappa2_design to decide which one is the coupling.
+round-trip amplitude a, so a single through-port spectrum alone does not tell
+over- from undercoupling. Decide only if the data give you a way to (for
+example kappa2_design); otherwise answer "ambiguous" rather than guess.
 
 When you are done, reply with ONLY a JSON object, no other text, no code fences:
 {{"regime": "...", "q_i": <number or null>, "anomalies": ["CODE", ...], "confidence": <0..1>}}
@@ -142,7 +146,13 @@ def run_case(
         "final_text": result.final_text,
         "answer": None if answer is None else {k: getattr(answer, k) for k in ANSWER_KEYS},
         "score": sc.to_dict(),
-        "truth": {k: truth[k] for k in ("regime", "q_i", "expected_anomalies")},
+        "truth": {
+            "regime": truth["regime"],
+            "regime_identifiable": truth.get("regime_identifiable", True),
+            "expected_regime": expected_regime(truth),
+            "q_i": truth["q_i"],
+            "expected_anomalies": truth["expected_anomalies"],
+        },
         "messages": result.messages,
     }
 

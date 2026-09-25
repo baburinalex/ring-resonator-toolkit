@@ -27,7 +27,7 @@ from eval.runner import (
     run_case,
     summarize,
 )
-from eval.scoring import Answer, parse_answer, score
+from eval.scoring import AMBIGUOUS, Answer, expected_regime, parse_answer, score
 from eval.tools import MODES, REGISTRY, ToolContext, ToolError, ToolRegistry
 from ring_toolkit.benchmark import generate_benchmark
 
@@ -343,6 +343,61 @@ def test_score_metrics():
     assert not bad.valid and not bad.regime_correct and bad.anomaly_recall == 0.0
     assert bad.parse_error == "не JSON"
     assert score(None, {**truth, "expected_anomalies": []}).anomaly_recall is None
+
+
+def test_parse_answer_accepts_ambiguous():
+    answer, err = parse_answer(
+        '{"regime": "ambiguous", "q_i": 1e5, "anomalies": [], "confidence": 0.3}'
+    )
+    assert err is None and answer.regime == AMBIGUOUS
+
+
+@pytest.mark.parametrize(
+    ("identifiable", "said", "correct"),
+    [
+        (True, "overcoupled", True),
+        (True, "undercoupled", False),
+        (True, "ambiguous", False),  # восстановимый режим: уклониться — промах
+        (False, "ambiguous", True),
+        (False, "overcoupled", False),  # верная догадка без данных — всё равно ошибка
+        (False, "undercoupled", False),
+        (None, "overcoupled", True),  # старая истина без поля — считается восстановимой
+    ],
+)
+def test_regime_scoring_with_identifiability(identifiable, said, correct):
+    truth = {"regime": "overcoupled", "q_i": 1e5, "expected_anomalies": []}
+    if identifiable is not None:
+        truth["regime_identifiable"] = identifiable
+    assert score(Answer(said, 1e5, [], 0.9), truth).regime_correct is correct
+    assert expected_regime(truth) == ("overcoupled" if identifiable is not False else AMBIGUOUS)
+
+
+def test_prompt_allows_ambiguous():
+    _, user = build_prompts("naive")
+    assert '"ambiguous"' in user and "if available" in user
+
+
+def test_no_hint_benchmark_end_to_end(tmp_path):
+    bench = tmp_path / "bench"
+    generate_benchmark(bench, seed=1, traps=("overcoupled", "kappa_dispersion"),
+                       design_hint=False)
+    cases = {_truth(c)["trap"]: c for c in list_cases(bench)}
+    for trap, case in cases.items():
+        rec = run_case(
+            ScriptedClient([
+                ScriptedClient.tool_call("read_file", {"path": "run_000/params.json"}),
+                ScriptedClient.final(
+                    '{"regime": "ambiguous", "q_i": null, "anomalies": [], "confidence": 0.5}'
+                ),
+            ]),
+            MODEL, "naive", case, _cfg(),
+        )
+        assert "kappa2_design" not in rec["tool_calls"][0]["output"]
+        # без подсказки "ambiguous" верно для обычного случая и неверно для дисперсии kappa^2
+        assert rec["score"]["regime_correct"] is (trap == "overcoupled")
+        assert rec["truth"]["expected_regime"] == (
+            AMBIGUOUS if trap == "overcoupled" else _truth(case)["regime"]
+        )
 
 
 # ----------------------------------------------------------------------

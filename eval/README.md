@@ -14,6 +14,7 @@ ollama serve                      # если ещё не запущен; API н�
 # 2. Случаи
 python -m ring_toolkit.benchmark sweeps/benchmark --seed 0          # 10 случаев
 python -m ring_toolkit.benchmark sweeps/benchmark_x3 --seed 0 -n 3  # по 3 на ловушку
+python -m ring_toolkit.benchmark sweeps/benchmark_nohint --seed 0 --no-design-hint  # без kappa2_design
 
 # 3. Прогон и сводка
 cp eval/config.example.toml eval/config.toml   # поправьте список моделей
@@ -45,7 +46,7 @@ python -m eval summarize eval_runs
 {"regime": "overcoupled", "q_i": 125000, "anomalies": ["RESONANCE_SPLITTING"], "confidence": 0.7}
 ```
 
-`regime` — `overcoupled` / `undercoupled` / `critical`; `q_i` — число или `null`;
+`regime` — `overcoupled` / `undercoupled` / `critical` / `ambiguous`; `q_i` — число или `null`;
 `anomalies` — коды из `ring_toolkit.benchmark.ANOMALY_CODES` (коды `ring_toolkit.analyze`
 с тем же смыслом засчитываются через `ANALYZER_ALIASES`). Невалидный ответ, исчерпанный
 лимит шагов или времени считаются ошибкой и входят в сводку, а не отбрасываются.
@@ -53,7 +54,9 @@ python -m eval summarize eval_runs
 ## Метрики сводки (`summary.csv`, `summary.md`)
 
 - `valid_rate` — доля валидных ответов;
-- `regime_accuracy` — доля верных режимов (невалидный ответ — промах);
+- `regime_accuracy` — доля верных режимов (невалидный ответ — промах). Если в `truth.json`
+  `regime_identifiable = false` (набор сгенерирован с `--no-design-hint`), верный ответ —
+  `ambiguous`, а уверенный выбор режима считается ошибкой;
 - `q_i_median_rel_error` — медиана |q_i − Q_i| / Q_i по ответам с числом;
 - `q_i_within_20pct` — доля случаев с ошибкой ≤ 20 % (от всех случаев);
 - `anomaly_recall` — доля ожидаемых аномалий, названных агентом (по случаям с аномалиями);

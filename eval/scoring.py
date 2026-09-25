@@ -9,6 +9,8 @@ from dataclasses import asdict, dataclass
 from ring_toolkit.benchmark import ANALYZER_ALIASES, ANOMALY_CODES, REGIMES
 
 ANSWER_KEYS = ("regime", "q_i", "anomalies", "confidence")
+AMBIGUOUS = "ambiguous"
+ANSWER_REGIMES = (*REGIMES, AMBIGUOUS)
 
 
 @dataclass
@@ -37,8 +39,8 @@ def parse_answer(text: str | None) -> tuple[Answer | None, str | None]:
         return None, f"ключи {sorted(data)} вместо {sorted(ANSWER_KEYS)}"
 
     regime = data["regime"]
-    if regime not in REGIMES:
-        return None, f"regime {regime!r} не из {list(REGIMES)}"
+    if regime not in ANSWER_REGIMES:
+        return None, f"regime {regime!r} не из {list(ANSWER_REGIMES)}"
     q_i = data["q_i"]
     if q_i is not None:
         if isinstance(q_i, bool) or not isinstance(q_i, int | float):
@@ -52,6 +54,16 @@ def parse_answer(text: str | None) -> tuple[Answer | None, str | None]:
     if isinstance(conf, bool) or not isinstance(conf, int | float) or not 0 <= conf <= 1:
         return None, "confidence должно быть числом в [0, 1]"
     return Answer(regime, None if q_i is None else float(q_i), anomalies, float(conf)), None
+
+
+def expected_regime(truth: dict) -> str:
+    """Правильный ответ о режиме связи.
+
+    Если режим по данным случая не восстановим (``regime_identifiable = false``),
+    верный ответ — "ambiguous", а уверенный выбор режима — ошибка. Истина без
+    этого поля (старые наборы) считается восстановимой.
+    """
+    return truth["regime"] if truth.get("regime_identifiable", True) else AMBIGUOUS
 
 
 def normalize_code(code: str) -> str:
@@ -88,7 +100,7 @@ def score(answer: Answer | None, truth: dict, parse_error: str | None = None) ->
     return Score(
         valid=True,
         parse_error=None,
-        regime_correct=answer.regime == truth["regime"],
+        regime_correct=answer.regime == expected_regime(truth),
         q_i_rel_error=q_err,
         anomaly_recall=len(named & expected) / len(expected) if expected else None,
         false_anomalies=sorted(named - expected),
