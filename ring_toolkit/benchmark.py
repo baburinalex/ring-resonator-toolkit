@@ -22,6 +22,12 @@
 разнесены (kappa^2 / (1 - a^2) >= 2 или <= 0.5), и проектной оценки с ошибкой
 +-25 % достаточно, чтобы выбрать правильную ветку.
 
+Без подсказки (``--no-design-hint``, ``design_hint=False``) ``kappa2_design`` в
+params.json не пишется, а в truth.json ``regime_identifiable = false`` — кроме
+ловушки ``kappa_dispersion``: там связь меняется по диапазону, а потери нет, и
+ветка определяется по тому, какой из двух параметров «плывёт». Спектр при этом
+тот же, что и с подсказкой (одинаковый seed — одинаковые массивы).
+
 Режим связи определяется отношением rho = kappa^2 / (1 - a^2) на 1550 нм:
     rho > 1.1 — пересвязь, rho < 0.9 — недосвязь, иначе — критическая связь.
 
@@ -278,8 +284,18 @@ _TRAP_FUNCS = {
 # ----------------------------------------------------------------------
 # Сборка случая
 # ----------------------------------------------------------------------
-def make_case(trap: str, seed: int, case_id: str | None = None) -> Case:
-    """Строит случай с ловушкой ``trap``; всё случайное выводится из ``seed``."""
+def is_regime_identifiable(trap: str, design_hint: bool) -> bool:
+    """Можно ли по данным случая отличить пере- от недосвязи."""
+    return design_hint or trap == "kappa_dispersion"
+
+
+def make_case(
+    trap: str, seed: int, case_id: str | None = None, design_hint: bool = True
+) -> Case:
+    """Строит случай с ловушкой ``trap``; всё случайное выводится из ``seed``.
+
+    ``design_hint=False`` убирает ``kappa2_design`` из params.json; спектр не меняется.
+    """
     if trap not in _TRAP_FUNCS:
         raise ValueError(f"неизвестная ловушка {trap!r}; доступны: {', '.join(TRAPS)}")
     rng = np.random.default_rng([seed, TRAPS.index(trap)])
@@ -301,9 +317,10 @@ def make_case(trap: str, seed: int, case_id: str | None = None) -> Case:
         "ring_radius": p.ring_radius,
         "coupling_length": p.coupling_length,
         "lam0_nm": LAM0_NM,
-        "kappa2_design": kappa2_design,
         "port": "through",
     }
+    if design_hint:
+        params["kappa2_design"] = kappa2_design
     truth = {
         "case_id": case_id,
         "trap": trap,
@@ -314,6 +331,8 @@ def make_case(trap: str, seed: int, case_id: str | None = None) -> Case:
         "fsr_nm": fom.fsr_nm,
         "expected_anomalies": list(_EXPECTED[trap]),
         "notes": notes,
+        "regime_identifiable": is_regime_identifiable(trap, design_hint),
+        "design_hint": design_hint,
         "seed": seed,
         "q_loaded": fom.q_loaded,
         "generator": {
@@ -346,6 +365,7 @@ def generate_benchmark(
     seed: int = 0,
     traps: tuple[str, ...] | list[str] = TRAPS,
     n_per_trap: int = 1,
+    design_hint: bool = True,
 ) -> list[Path]:
     """Набор случаев с нейтральными именами ``case_000``... в перемешанном порядке.
 
@@ -357,11 +377,15 @@ def generate_benchmark(
     manifest, paths = [], []
     for i, j in enumerate(order):
         trap, case_seed = jobs[j]
-        case = make_case(trap, case_seed, case_id=f"case_{i:03d}")
+        case = make_case(trap, case_seed, case_id=f"case_{i:03d}", design_hint=design_hint)
         paths.append(write_case(case, out_dir))
         manifest.append({"case_id": case.case_id, "trap": trap, "seed": case_seed})
     (out_dir / "manifest.json").write_text(
-        json.dumps({"seed": seed, "cases": manifest}, indent=2, ensure_ascii=False),
+        json.dumps(
+            {"seed": seed, "design_hint": design_hint, "cases": manifest},
+            indent=2,
+            ensure_ascii=False,
+        ),
         encoding="utf-8",
     )
     return paths
@@ -373,9 +397,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--traps", nargs="+", choices=TRAPS, default=list(TRAPS))
     parser.add_argument("-n", "--n-per-trap", type=int, default=1)
+    parser.add_argument(
+        "--no-design-hint",
+        dest="design_hint",
+        action="store_false",
+        help="не писать kappa2_design в params.json (режим связи становится невосстановимым)",
+    )
     args = parser.parse_args(argv)
 
-    paths = generate_benchmark(args.out_dir, args.seed, args.traps, args.n_per_trap)
+    paths = generate_benchmark(
+        args.out_dir, args.seed, args.traps, args.n_per_trap, design_hint=args.design_hint
+    )
     for path in paths:
         truth = json.loads((path / "truth.json").read_text(encoding="utf-8"))
         print(f"{path.name}: {truth['trap']:<18} {truth['regime']:<13} "

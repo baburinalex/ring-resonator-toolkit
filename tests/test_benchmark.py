@@ -14,6 +14,7 @@ from ring_toolkit.benchmark import (
     TRAPS,
     classify_regime,
     generate_benchmark,
+    is_regime_identifiable,
     main,
     make_case,
     through_field,
@@ -24,7 +25,7 @@ from ring_toolkit.sweep_io import list_runs, load_run
 SEEDS = (0, 1, 7)
 TRUTH_KEYS = {
     "case_id", "trap", "regime", "q_i", "q_c", "kappa2_1550", "fsr_nm",
-    "expected_anomalies", "notes",
+    "expected_anomalies", "notes", "regime_identifiable",
 }
 
 
@@ -122,6 +123,27 @@ def test_params_do_not_leak_truth():
         assert abs(np.log(design / k2)) <= np.log(1.25) + 1e-12
         if case.truth["regime"] != "critical":
             assert abs(np.log(design / k2)) < abs(np.log(design / loss))
+
+
+@pytest.mark.parametrize("trap", TRAPS)
+def test_design_hint_flag(trap):
+    """Без подсказки: нет kappa2_design, тот же спектр, regime_identifiable по правилу."""
+    with_hint, without = make_case(trap, 2), make_case(trap, 2, design_hint=False)
+    assert "kappa2_design" in with_hint.params
+    assert "kappa2_design" not in without.params
+    assert set(without.params) == set(with_hint.params) - {"kappa2_design"}
+    np.testing.assert_array_equal(with_hint.spectrum.t_through, without.spectrum.t_through)
+    assert with_hint.truth["regime_identifiable"] is True
+    assert without.truth["regime_identifiable"] is (trap == "kappa_dispersion")
+    assert without.truth["design_hint"] is False
+    # истина о самом кольце не зависит от подсказки
+    for key in ("regime", "q_i", "q_c", "kappa2_1550", "fsr_nm", "expected_anomalies"):
+        assert with_hint.truth[key] == without.truth[key]
+
+
+def test_regime_identifiable_rule():
+    assert all(is_regime_identifiable(t, True) for t in TRAPS)
+    assert [t for t in TRAPS if is_regime_identifiable(t, False)] == ["kappa_dispersion"]
 
 
 def test_through_field_matches_analytical_model():
@@ -263,6 +285,19 @@ def test_generate_benchmark_neutral_names_and_manifest(tmp_path):
     generate_benchmark(again, seed=5, n_per_trap=2)
     for path in paths:
         assert (path / "truth.json").read_bytes() == (again / path.name / "truth.json").read_bytes()
+
+
+def test_cli_no_design_hint(tmp_path):
+    assert main([str(tmp_path), "--traps", "overcoupled", "kappa_dispersion",
+                 "--no-design-hint"]) == 0
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["design_hint"] is False
+    for entry in manifest["cases"]:
+        case_dir = tmp_path / entry["case_id"]
+        _, params = load_run(case_dir / "run_000")
+        truth = json.loads((case_dir / "truth.json").read_text(encoding="utf-8"))
+        assert "kappa2_design" not in params
+        assert truth["regime_identifiable"] is (entry["trap"] == "kappa_dispersion")
 
 
 def test_cli(tmp_path, capsys):
