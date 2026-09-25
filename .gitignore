@@ -258,3 +258,6 @@ Thumbs.db
 notebooks/scratch/
 notebooks/.ipynb_checkpoints/sweeps/
 sweeps/
+
+# eval harness output
+eval_runs/

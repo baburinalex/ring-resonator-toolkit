@@ -1,0 +1,31 @@
+# Конфиг стенда eval. Запуск:
+#   python -m ring_toolkit.benchmark sweeps/benchmark --seed 0
+#   python -m eval run --config eval/config.example.toml --cases sweeps/benchmark --out eval_runs
+
+[run]
+max_steps = 20          # запросов к модели на один случай
+time_limit_s = 600      # на один случай, включая инструменты
+tool_timeout_s = 60     # на один вызов run_python / run_analysis
+modes = ["naive", "operator"]
+
+# Каждая [[models]] — отдельная строка в сводке. Ollama: base_url .../v1, ключ не нужен.
+[[models]]
+name = "qwen2.5-7b"
+model = "qwen2.5:7b-instruct"
+base_url = "http://localhost:11434/v1"
+temperature = 0.0
+seed = 0
+
+[[models]]
+name = "llama3.1-8b"
+model = "llama3.1:8b"
+base_url = "http://localhost:11434/v1"
+temperature = 0.0
+seed = 0
+
+# Любой OpenAI-совместимый сервер; ключ берётся из переменной окружения.
+# [[models]]
+# name = "remote"
+# model = "some-model"
+# base_url = "https://api.example.com/v1"
+# api_key_env = "EXAMPLE_API_KEY"
