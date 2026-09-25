@@ -60,14 +60,17 @@ def check_analysis(
     round_trip_um: float | None = None,
 ) -> dict:
     """Превращает SpectrumAnalysis в JSON-совместимый словарь с проверками."""
-    step_nm = float(np.median(np.abs(np.diff(lam_nm))))
+    # шаг — по уникальным λ: повторные отсчёты на одной длине волны дают нулевой
+    # медианный шаг и бесконечное число точек на FWHM
+    unique_lam = np.unique(np.asarray(lam_nm, dtype=float))
+    step_nm = float(np.median(np.diff(unique_lam))) if unique_lam.size > 1 else float("nan")
     anomalies: list[dict] = []
     rows: list[dict] = []
 
     for r in analysis.resonances:
-        if math.isfinite(r.q) and r.q > 0:
+        if math.isfinite(r.q) and r.q > 0 and step_nm > 0:
             points = (r.lambda0_nm / r.q) / step_nm
-            reliable = points >= MIN_POINTS_PER_FWHM
+            reliable = math.isfinite(points) and points >= MIN_POINTS_PER_FWHM
         else:
             points, reliable = float("nan"), False
         rows.append(

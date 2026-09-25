@@ -1,7 +1,9 @@
 import json
 import math
+import warnings
 
 import numpy as np
+import pytest
 
 from ring_toolkit.analysis import Resonance, SpectrumAnalysis
 from ring_toolkit.analyze import check_analysis, main
@@ -51,6 +53,38 @@ def test_undersampled_high_q_is_flagged_not_reported_as_reliable():
     assert "UNDERSAMPLED_FWHM" in _codes(result)
     assert result["resonances"][0]["q_reliable"] is False
     assert result["mean_q_loaded_reliable"] is None
+
+
+def test_repeated_samples_use_unique_grid_step():
+    # каждая λ записана трижды: медианный шаг по сырым отсчётам = 0
+    lam = np.repeat(LAM, 3)
+    analysis = SpectrumAnalysis(resonances=[Resonance(lambda0_nm=1550.0, q=1e4, depth=0.8)])
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # деление на ноль больше не допускается
+        result = check_analysis(analysis, lam, win_nm=5.0, min_sep_nm=1.0)
+    assert result["grid_step_nm"] == pytest.approx(0.01)
+    row = result["resonances"][0]
+    assert row["points_per_fwhm"] == pytest.approx(15.5, rel=0.01)
+    assert row == check_analysis(analysis, LAM, win_nm=5.0, min_sep_nm=1.0)["resonances"][0]
+
+
+def test_repeated_undersampled_line_is_not_reliable():
+    # Q=1e6 на повторяющейся сетке: раньше шаг 0 давал points_per_fwhm = inf и "надёжно"
+    lam = np.repeat(LAM, 2)
+    analysis = SpectrumAnalysis(resonances=[Resonance(lambda0_nm=1550.0, q=1e6, depth=0.5)])
+    result = check_analysis(analysis, lam, win_nm=5.0, min_sep_nm=1.0)
+    row = result["resonances"][0]
+    assert row["q_reliable"] is False
+    assert row["points_per_fwhm"] is not None and math.isfinite(row["points_per_fwhm"])
+    assert "UNDERSAMPLED_FWHM" in _codes(result)
+
+
+def test_single_wavelength_grid_is_not_reliable():
+    lam = np.full(10, 1550.0)
+    analysis = SpectrumAnalysis(resonances=[Resonance(lambda0_nm=1550.0, q=1e4, depth=0.8)])
+    result = check_analysis(analysis, lam, win_nm=5.0, min_sep_nm=1.0)
+    assert result["resonances"][0]["q_reliable"] is False
+    assert "Infinity" not in json.dumps(result)
 
 
 def test_failed_q_is_counted_and_json_safe():
