@@ -2,8 +2,9 @@ import json
 import math
 
 import numpy as np
+import pytest
 
-from ring_toolkit.analysis import Resonance, SpectrumAnalysis
+from ring_toolkit.analysis import Resonance, SpectrumAnalysis, analyze_spectrum
 from ring_toolkit.analyze import check_analysis, main
 from ring_toolkit.simulation import RingSpectrum
 from ring_toolkit.sweep_io import save_run
@@ -85,6 +86,75 @@ def _lorentzian_spectrum(shift_nm: float) -> RingSpectrum:
     for lam0 in np.arange(1542.0, 1560.0, 4.0) + shift_nm:
         t -= 0.8 / (1.0 + ((LAM - lam0) / 0.05) ** 2)
     return RingSpectrum(lam_nm=LAM, t_through=t, t_in=np.ones_like(LAM))
+
+
+SHAPE_CODES = {"RESONANCE_SPLITTING", "BASELINE_TILT", "BASELINE_RIPPLE"}
+CENTERS = np.arange(1542.0, 1560.0, 4.0)  # FSR 4 нм, FWHM 0.1 нм (10 точек сетки)
+
+
+def _dips(split_nm: float = 0.0) -> np.ndarray:
+    """Лоренцевы провалы; split_nm > 0 — каждый расщеплён в дублет."""
+    t = np.ones_like(LAM)
+    for lam0 in CENTERS:
+        for c in ((lam0 - split_nm / 2, lam0 + split_nm / 2) if split_nm else (lam0,)):
+            t -= 0.8 / (1.0 + ((LAM - c) / 0.05) ** 2) / (2 if split_nm else 1)
+    return t
+
+
+def _noisy(t: np.ndarray, seed: int = 0) -> np.ndarray:
+    return t + np.random.default_rng(seed).normal(0.0, 0.002, t.shape)
+
+
+def _shape_codes(t: np.ndarray, lam: np.ndarray = LAM) -> set[str]:
+    analysis = analyze_spectrum(lam, t)
+    result = check_analysis(analysis, lam, win_nm=5.0, min_sep_nm=1.0, t=t)
+    return _codes(result) & SHAPE_CODES
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_clean_spectrum_has_no_shape_anomalies(seed):
+    assert _shape_codes(_noisy(_dips(), seed)) == set()
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_doublet_is_flagged(seed):
+    # компоненты на расстоянии 0.25 нм = 2.5 FWHM; find_resonances сливает их в один провал
+    assert _shape_codes(_noisy(_dips(split_nm=0.25), seed)) == {"RESONANCE_SPLITTING"}
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_baseline_tilt_is_flagged(seed):
+    tilt = 1.0 - 0.2 * (LAM - LAM[0]) / np.ptp(LAM)
+    assert _shape_codes(_noisy(0.9 * tilt * _dips(), seed)) == {"BASELINE_TILT"}
+
+
+@pytest.mark.parametrize("seed", range(5))
+def test_fabry_perot_ripple_is_flagged(seed):
+    ripple = 1.0 + 0.06 * np.cos(2 * np.pi * LAM / 1.2)  # период 1.2 нм = 0.3 FSR
+    assert _shape_codes(_noisy(0.9 * ripple * _dips(), seed)) == {"BASELINE_RIPPLE"}
+
+
+def test_shape_checks_survive_repeated_samples():
+    lam = np.repeat(LAM, 2)
+    t = _noisy(np.repeat(_dips(split_nm=0.25), 2))
+    assert _shape_codes(t, lam) == {"RESONANCE_SPLITTING"}
+
+
+def test_shape_checks_need_spectrum():
+    # без t (старый вызов) проверки формы не выполняются
+    t = _noisy(_dips(split_nm=0.25))
+    result = check_analysis(analyze_spectrum(LAM, t), LAM, win_nm=5.0, min_sep_nm=1.0)
+    assert _codes(result) & SHAPE_CODES == set()
+
+
+def test_cli_reports_shape_anomalies(tmp_path):
+    ripple = 1.0 + 0.06 * np.cos(2 * np.pi * LAM / 1.2)
+    t = _noisy(0.9 * ripple * _dips())
+    spec = RingSpectrum(lam_nm=LAM, t_through=t, t_in=np.ones_like(LAM))
+    save_run(tmp_path / "run_000", spec, {"ring_radius": 20.0})
+    assert main([str(tmp_path)]) == 0
+    report = json.loads((tmp_path / "analysis.json").read_text(encoding="utf-8"))
+    assert "BASELINE_RIPPLE" in {a["code"] for a in report["runs"][0]["anomalies"]}
 
 
 def test_cli_writes_analysis_json(tmp_path, capsys):
