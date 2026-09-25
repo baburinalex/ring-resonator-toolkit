@@ -57,6 +57,8 @@ python -m eval summarize eval_runs
 - `regime_accuracy` — доля верных режимов (невалидный ответ — промах). Если в `truth.json`
   `regime_identifiable = false` (набор сгенерирован с `--no-design-hint`), верный ответ —
   `ambiguous`, а уверенный выбор режима считается ошибкой;
+- `regime_accuracy_identifiable` / `ambiguous_accuracy` — то же отдельно по случаям с
+  восстановимым режимом и по случаям, где верный ответ `ambiguous` (`—`, если таких нет);
 - `q_i_median_rel_error` — медиана |q_i − Q_i| / Q_i по ответам с числом;
 - `q_i_within_20pct` — доля случаев с ошибкой ≤ 20 % (от всех случаев);
 - `anomaly_recall` — доля ожидаемых аномалий, названных агентом (по случаям с аномалиями);

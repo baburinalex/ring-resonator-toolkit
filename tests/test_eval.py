@@ -440,6 +440,24 @@ def test_run_benchmark_logs_and_summary(bench, tmp_path):
     assert "| stub | naive |" in md and "| stub | operator |" in md
 
 
+def test_summary_splits_regime_accuracy_by_identifiability():
+    def rec(identifiable, correct):
+        return {
+            "model": {"name": "m"}, "mode": "naive", "elapsed_s": 1.0,
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "truth": {"regime_identifiable": identifiable},
+            "score": {"valid": True, "regime_correct": correct, "q_i_rel_error": None,
+                      "anomaly_recall": None, "false_anomalies": []},
+        }
+
+    [row] = summarize([rec(True, True), rec(True, False), rec(False, True)])
+    assert row["regime_accuracy"] == pytest.approx(2 / 3)
+    assert row["regime_accuracy_identifiable"] == 0.5
+    assert row["ambiguous_accuracy"] == 1.0
+    [only] = summarize([rec(True, True)])
+    assert only["ambiguous_accuracy"] is None
+
+
 def test_cli_summarize(bench, tmp_path):
     from eval.__main__ import main
 

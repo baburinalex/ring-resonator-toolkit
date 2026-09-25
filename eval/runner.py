@@ -199,7 +199,8 @@ def run_benchmark(
 # Сводка
 # ----------------------------------------------------------------------
 SUMMARY_COLUMNS = (
-    "model", "mode", "n_cases", "valid_rate", "regime_accuracy", "q_i_median_rel_error",
+    "model", "mode", "n_cases", "valid_rate", "regime_accuracy",
+    "regime_accuracy_identifiable", "ambiguous_accuracy", "q_i_median_rel_error",
     "q_i_within_20pct", "anomaly_recall", "false_anomalies_per_case", "mean_tokens",
     "mean_time_s",
 )
@@ -207,6 +208,16 @@ SUMMARY_COLUMNS = (
 
 def _mean(xs: list[float]) -> float | None:
     return statistics.fmean(xs) if xs else None
+
+
+def _share(recs: list[dict], identifiable: bool) -> float | None:
+    """Доля верных режимов среди случаев с заданной восстановимостью режима."""
+    sub = [
+        r["score"]["regime_correct"]
+        for r in recs
+        if r["truth"].get("regime_identifiable", True) is identifiable
+    ]
+    return sum(sub) / len(sub) if sub else None
 
 
 def summarize(records: Iterable[dict]) -> list[dict]:
@@ -228,6 +239,9 @@ def summarize(records: Iterable[dict]) -> list[dict]:
                 "n_cases": n,
                 "valid_rate": sum(s["valid"] for s in scores) / n,
                 "regime_accuracy": sum(s["regime_correct"] for s in scores) / n,
+                # отдельно: случаи с восстановимым режимом и случаи, где верно "ambiguous"
+                "regime_accuracy_identifiable": _share(recs, True),
+                "ambiguous_accuracy": _share(recs, False),
                 "q_i_median_rel_error": statistics.median(q_errs) if q_errs else None,
                 # невалидные ответы и q_i = null считаются промахом
                 "q_i_within_20pct": sum(e <= 0.2 for e in q_errs) / n,
